@@ -23,10 +23,6 @@ const s3 = new S3();
 const sharp = require('sharp');
 const https = require('https');
 const url = require('url');
-const moment = require('moment');
-const S3Helper = require('./lib/s3-helper.js');
-const UsageMetrics = require('./lib/usage-metrics');
-const uuidv4 = require('uuid/v4');
 
 /**
  * Request handler.
@@ -70,14 +66,14 @@ let tileImage = async function(bucket, key) {
             layout: 'zoomify'
           }).toFile(tmp_location + 'tiled.dz', function(err, info) {
             if (err) {
-                console.log(err, err.stack);
+                console.log('err', err);
             } else {
                 console.log('successfully tiled images ' + tmp_location);
-                Promise.all(upload_recursive_dir(tmp_location + 'tiled/', bucket, key, [])).then(function(err, data) {
-                        if (err) console.log(err, err.stack); // an error occurred
+                Promise.all(upload_recursive_dir(tmp_location + 'tiled/', bucket, key, [])).then(function(errs, data) {
+                        if (errs.length) console.log('errors ', errs);// an error occurred
                         console.log('successfully uploaded tiled images');
                     }).catch(function(exception) {
-                        console.log('error', exception);
+                        console.log('caught exception', exception);
                     });;
             }
         });
@@ -145,29 +141,24 @@ let downloadImage = async function(bucket, key){
 
 
 let upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key, promises) {
-    fs.readdir(base_tmpdir, function(err, filenames) {
-        if (err) {
-          console.log(err, err.stack); // an error occurred
-          return;
+    let files = fs.readdirSync(base_tmpdir);
+
+    files.forEach(function (filename) {
+        let local_temp_path = base_tmpdir + filename;
+        let destS3key = s3_key + filename;
+        if (fs.lstatSync(local_temp_path).isDirectory()) {
+            promises = upload_recursive_dir(local_temp_path + '/', destS3Bucket, destS3key + '/', promises);
+        } else if(filename.endsWith('.xml') || filename.endsWith('.png')) {
+            fs.readFile(local_temp_path, function (err, file) {
+              if (err) console.log('readFile err', err); // an error occurred // an error occurred
+              let params = {
+                Bucket: destS3Bucket,
+                Key: destS3key,
+                Body: file
+              }
+              promises.push(s3.putObject(params).promise());
+            });
         }
-        filenames.forEach(function(filename) {
-            let local_temp_path = base_tmpdir + filename;
-            let destS3key = s3_key + filename;
-            if (fs.lstatSync(local_temp_path).isDirectory()) {
-                promises = upload_recursive_dir(local_temp_path + '/', destS3Bucket, destS3key + '/', promises);
-            } else if(filename.endsWith('.xml') || filename.endsWith('.png')) {
-                fs.readFile(local_temp_path, function (err, file) {
-                    if (err) console.log(err, err.stack); // an error occurred
-                    let params = {
-                        Bucket: destS3Bucket,
-                        Key: destS3key,
-                        Body: file
-                    }
-                    // console.log("pushing params", params['KEY'])
-                    promises.push(s3.putObject(params).promise());
-                });
-            }
-        });
     });
     return promises;
 }
