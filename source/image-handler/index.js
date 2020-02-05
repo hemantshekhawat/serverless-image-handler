@@ -102,9 +102,19 @@ const getResponseHeaders = (isErr = false, isAlb = false) => {
     if (!isAlb) {
         headers["Access-Control-Allow-Credentials"] = true;
     }
+    const setCacheControl = (
+            (process.env.CACHE_CONTROL !== "") &&
+            (process.env.CACHE_CONTROL !== undefined)
+        );
+
+    if (setCacheControl) {
+        headers["Cache-Control"] = process.env.CACHE_CONTROL;
+    }
+
     if (corsEnabled) {
         headers["Access-Control-Allow-Origin"] = process.env.CORS_ORIGIN;
     }
+
     if (isErr) {
         headers["Content-Type"] = "application/json"
     }
