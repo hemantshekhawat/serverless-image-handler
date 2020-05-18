@@ -22,28 +22,31 @@ exports.handler = async (event) => {
         const request = await imageRequest.setup(event);
         console.log(request);
         const processedRequest = await imageHandler.process(request);
-
         const headers = getResponseHeaders();
-        headers["Content-Type"] = request.ContentType;
-        headers["Expires"] = request.Expires;
-        headers["Last-Modified"] = request.LastModified;
-        headers["Cache-Control"] = request.CacheControl;
 
-        return {
+        if (request.headers) {
+            // Apply the custom headers overwriting any that may need overwriting
+            for (let i = 0; i < request.headers.length; i++) {
+                headers[request.headers[i].key] = request.headers[i].value;
+            }
+        }
+
+        const response = {
             "statusCode": 200,
             "headers" : headers,
             "body": processedRequest,
             "isBase64Encoded": true
-        };
+        }
+        return response;
     } catch (err) {
         console.log(err);
-
-        return {
+        const response = {
             "statusCode": err.status,
             "headers" : getResponseHeaders(true),
             "body": JSON.stringify(err),
             "isBase64Encoded": false
-        };
+        }
+        return response;
     }
 }
 
@@ -57,8 +60,10 @@ const getResponseHeaders = (isErr) => {
     const headers = {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Allow-Credentials": true
-    }
+        "Access-Control-Allow-Credentials": true,
+        "Content-Type": "image"
+    };
+
     if (corsEnabled) {
         headers["Access-Control-Allow-Origin"] = process.env.CORS_ORIGIN;
     }

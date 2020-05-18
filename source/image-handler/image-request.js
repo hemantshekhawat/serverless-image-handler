@@ -27,35 +27,7 @@ class ImageRequest {
             this.key = this.parseImageKey(event, this.requestType);
             this.edits = this.parseImageEdits(event, this.requestType);
             this.originalImage = await this.getOriginalImage(this.bucket, this.key);
-
-            /* Decide the output format of the image.
-             * 1) If the format is provided, the output format is the provided format.
-             * 2) If headers contain "Accept: image/webp", the output format is webp.
-             * 3) Use the default image format for the rest of cases.
-             */
-            let outputFormat = this.getOutputFormat(event);
-            if (this.edits && this.edits.toFormat) {
-                this.outputFormat = this.edits.toFormat;
-            } else if (outputFormat) {
-                this.outputFormat = outputFormat;
-            }
-
-            // Fix quality for Thumbor and Custom request type if outputFormat is different from quality type.
-            if (this.outputFormat) {
-                const requestType = ['Custom', 'Thumbor'];
-                const acceptedValues = ['jpeg', 'png', 'webp', 'tiff', 'heif'];
-
-                this.ContentType = `image/${this.outputFormat}`;
-                if (requestType.includes(this.requestType) && acceptedValues.includes(this.outputFormat)) {
-                    let qualityKey = Object.keys(this.edits).filter(key => acceptedValues.includes(key))[0];
-                    if (qualityKey && (qualityKey !== this.outputFormat)) {
-                        const qualityValue = this.edits[qualityKey];
-                        this.edits[this.outputFormat] = qualityValue;
-                        delete this.edits[qualityKey];
-                    }
-                }
-            }
-
+            this.headers = this.parseImageHeaders(event, this.requestType);
             return Promise.resolve(this);
         } catch (err) {
             return Promise.reject(err);
@@ -72,36 +44,17 @@ class ImageRequest {
         const S3 = require('aws-sdk/clients/s3');
         const s3 = new S3();
         const imageLocation = { Bucket: bucket, Key: key };
+        const request = s3.getObject(imageLocation).promise();
         try {
-            const originalImage = await s3.getObject(imageLocation).promise();
-
-            if (originalImage.ContentType) {
-                this.ContentType = originalImage.ContentType;
-            } else {
-                this.ContentType = "image";
-            }
-
-            if (originalImage.Expires) {
-                this.Expires = new Date(originalImage.Expires).toUTCString();
-            }
-
-            if (originalImage.LastModified) {
-                this.LastModified = new Date(originalImage.LastModified).toUTCString();
-            }
-
-            if (originalImage.CacheControl) {
-                this.CacheControl = originalImage.CacheControl;
-            } else {
-                this.CacheControl = "max-age=31536000,public";
-            }
-
+            const originalImage = await request;
             return Promise.resolve(originalImage.Body);
-        } catch(err) {
+        }
+        catch(err) {
             return Promise.reject({
-                status: ('NoSuchKey' === err.code) ? 404 : 500,
+                status: 500,
                 code: err.code,
                 message: err.message
-            });
+            })
         }
     }
 
@@ -118,7 +71,7 @@ class ImageRequest {
             if (decoded.bucket !== undefined) {
                 // Check the provided bucket against the whitelist
                 const sourceBuckets = this.getAllowedSourceBuckets();
-                if (sourceBuckets.includes(decoded.bucket) || decoded.bucket.match(new RegExp('^' + sourceBuckets[0] + '$'))) {
+                if (sourceBuckets.includes(decoded.bucket)) {
                     return decoded.bucket;
                 } else {
                     throw ({
@@ -138,7 +91,7 @@ class ImageRequest {
             return sourceBuckets[0];
         } else {
             throw ({
-                status: 404,
+                status: 400,
                 code: 'ImageBucket::CannotFindBucket',
                 message: 'The bucket you specified could not be found. Please check the spelling of the bucket name in your request.'
             });
@@ -173,6 +126,22 @@ class ImageRequest {
     }
 
     /**
+     * Parses the headers to be sent with the response
+     * @param {String} event - Lambda request body.
+     * @param {String} requestType - Image handler request type.
+     */
+    parseImageHeaders(event, requestType) {
+        if (requestType === "Default") {
+            const decoded = this.decodeRequest(event);
+            if (decoded.headers !== undefined) {
+                return decoded.headers;
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * Parses the name of the appropriate Amazon S3 key corresponding to the
      * original image.
      * @param {String} event - Lambda request body.
@@ -183,18 +152,18 @@ class ImageRequest {
             // Decode the image request and return the image key
             const decoded = this.decodeRequest(event);
             return decoded.key;
+        } else if (requestType === "Thumbor" || requestType === "Custom") {
+            // Parse the key from the end of the path
+            const key = (event["path"]).split("/");
+            return key[key.length - 1];
+        } else {
+            // Return an error for all other conditions
+            throw ({
+                status: 400,
+                code: 'ImageEdits::CannotFindImage',
+                message: 'The image you specified could not be found. Please check your request syntax as well as the bucket you specified to ensure it exists.'
+            });
         }
-
-        if (requestType === "Thumbor" || requestType === "Custom") {
-            return decodeURIComponent(event["path"].replace(/\d+x\d+:\d+x\d+\/|\d+x\d+\/|filters[:-][^/;]+|\/fit-in\/+|^\/+/g, '').replace(/^\/+/, ''));
-        }
-
-        // Return an error for all other conditions
-        throw ({
-            status: 404,
-            code: 'ImageEdits::CannotFindImage',
-            message: 'The image you specified could not be found. Please check your request syntax as well as the bucket you specified to ensure it exists.'
-        });
     }
 
     /**
@@ -208,8 +177,8 @@ class ImageRequest {
         const path = event["path"];
         // ----
         const matchDefault = new RegExp(/^(\/?)([0-9a-zA-Z+\/]{4})*(([0-9a-zA-Z+\/]{2}==)|([0-9a-zA-Z+\/]{3}=))?$/);
-        const matchThumbor = new RegExp(/^(\/?)((fit-in)?|(filters:.+\(.?\))?|(unsafe)?).*(.+jpg|.+png|.+webp|.+tiff|.+jpeg)$/i);
-        const matchCustom = new RegExp(/(\/?)(.*)(jpg|png|webp|tiff|jpeg)/i);
+        const matchThumbor = new RegExp(/^(\/?)((fit-in)?|(filters:.+\(.?\))?|(unsafe)?).*(.+jpg|.+png|.+webp|.+tiff|.+jpeg)$/);
+        const matchCustom = new RegExp(/(\/?)(.*)(jpg|png|webp|tiff|jpeg)/);
         const definedEnvironmentVariables = (
             (process.env.REWRITE_MATCH_PATTERN !== "") &&
             (process.env.REWRITE_SUBSTITUTION !== "") &&
@@ -242,10 +211,9 @@ class ImageRequest {
         if (path !== undefined) {
             const splitPath = path.split("/");
             const encoded = splitPath[splitPath.length - 1];
-            const toBuffer = Buffer.from(encoded, 'base64');
+            const toBuffer = new Buffer(encoded, 'base64');
             try {
-                // To support European characters, 'ascii' was removed.
-                return JSON.parse(toBuffer.toString());
+                return JSON.parse(toBuffer.toString('ascii'));
             } catch (e) {
                 throw ({
                     status: 400,
@@ -280,22 +248,6 @@ class ImageRequest {
             const buckets = formatted.split(',');
             return buckets;
         }
-    }
-
-    /**
-    * Return the output format depending on the accepts headers and request type
-    * @param {Object} event - The request body.
-    */
-    getOutputFormat(event) {
-        const autoWebP = (process.env.AUTO_WEBP === "Yes");
-        if (autoWebP && event.headers.Accept && event.headers.Accept.includes('image/webp')) {
-            return 'webp';
-        } else if (this.requestType === 'Default') {
-            const decoded = this.decodeRequest(event);
-            return decoded.outputFormat;
-        }
-
-        return null;
     }
 }
 

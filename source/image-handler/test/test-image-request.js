@@ -23,7 +23,7 @@ describe('setup()', function() {
             the ImageRequest object with the proper values`, async function() {
             // Arrange
             const event = {
-                path : '/eyJidWNrZXQiOiJ2YWxpZEJ1Y2tldCIsImtleSI6InZhbGlkS2V5IiwiZWRpdHMiOnsiZ3JheXNjYWxlIjp0cnVlfSwib3V0cHV0Rm9ybWF0IjoianBlZyJ9'
+                path : '/eyJidWNrZXQiOiJ2YWxpZEJ1Y2tldCIsImtleSI6InZhbGlkS2V5IiwiZWRpdHMiOnsiZ3JheXNjYWxlIjp0cnVlfX0='
             }
             process.env = {
                 SOURCE_BUCKETS : "validBucket, validBucket2"
@@ -34,7 +34,7 @@ describe('setup()', function() {
             const getObject = S3.prototype.getObject = sinon.stub();
             getObject.withArgs({Bucket: 'validBucket', Key: 'validKey'}).returns({
                 promise: () => { return {
-                    Body: Buffer.from('SampleImageContent\n')
+                  Body: Buffer.from('SampleImageContent\n')
                 }}
             })
             // Act
@@ -45,10 +45,8 @@ describe('setup()', function() {
                 bucket: 'validBucket',
                 key: 'validKey',
                 edits: { grayscale: true },
-                outputFormat: 'jpeg',
-                originalImage: Buffer.from('SampleImageContent\n'),
-                CacheControl: 'max-age=31536000,public',
-                ContentType: 'image/jpeg'
+                headers: [],
+                originalImage: Buffer.from('SampleImageContent\n')
             }
             // Assert
             assert.deepEqual(imageRequest, expectedResult);
@@ -70,7 +68,7 @@ describe('setup()', function() {
             const getObject = S3.prototype.getObject = sinon.stub();
             getObject.withArgs({Bucket: 'allowedBucket001', Key: 'test-image-001.jpg'}).returns({
                 promise: () => { return {
-                    Body: Buffer.from('SampleImageContent\n')
+                  Body: Buffer.from('SampleImageContent\n')
                 }}
             })
             // Act
@@ -81,9 +79,8 @@ describe('setup()', function() {
                 bucket: 'allowedBucket001',
                 key: 'test-image-001.jpg',
                 edits: { grayscale: true },
-                originalImage: Buffer.from('SampleImageContent\n'),
-                CacheControl: 'max-age=31536000,public',
-                ContentType: 'image'
+                headers: [],
+                originalImage: Buffer.from('SampleImageContent\n')
             }
             // Assert
             assert.deepEqual(imageRequest, expectedResult);
@@ -107,10 +104,6 @@ describe('setup()', function() {
             const getObject = S3.prototype.getObject = sinon.stub();
             getObject.withArgs({Bucket: 'allowedBucket001', Key: 'custom-image.jpg'}).returns({
                 promise: () => { return {
-                  CacheControl: 'max-age=300,public',
-                  ContentType: 'custom-type',
-                  Expires: 'Tue, 24 Dec 2019 13:46:28 GMT',
-                  LastModified: 'Sat, 19 Dec 2009 16:30:47 GMT',
                   Body: Buffer.from('SampleImageContent\n')
                 }}
             })
@@ -125,11 +118,8 @@ describe('setup()', function() {
                     grayscale: true,
                     rotate: 90
                 },
-                originalImage: Buffer.from('SampleImageContent\n'),
-                CacheControl: 'max-age=300,public',
-                ContentType: 'custom-type',
-                Expires: 'Tue, 24 Dec 2019 13:46:28 GMT',
-                LastModified: 'Sat, 19 Dec 2009 16:30:47 GMT',
+                headers: [],
+                originalImage: Buffer.from('SampleImageContent\n')
             }
             // Assert
             assert.deepEqual(imageRequest, expectedResult);
@@ -147,7 +137,7 @@ describe('setup()', function() {
             const getObject = S3.prototype.getObject = sinon.stub();
             getObject.withArgs({Bucket: 'validBucket', Key: 'validKey'}).returns({
                 promise: () => { return {
-                    Body: Buffer.from('SampleImageContent\n')
+                  Body: Buffer.from('SampleImageContent\n')
                 }}
             })
             // Act
@@ -175,7 +165,7 @@ describe('getOriginalImage()', function() {
             const getObject = S3.prototype.getObject = sinon.stub();
             getObject.withArgs({Bucket: 'validBucket', Key: 'validKey'}).returns({
                 promise: () => { return {
-                    Body: Buffer.from('SampleImageContent\n')
+                  Body: Buffer.from('SampleImageContent\n')
                 }}
             })
             // Act
@@ -195,8 +185,8 @@ describe('getOriginalImage()', function() {
             getObject.withArgs({Bucket: 'invalidBucket', Key: 'invalidKey'}).returns({
                 promise: () => {
                     return Promise.reject({
-                        code: 'NoSuchKey',
-                        message: 'SimulatedException'
+                        code: 500,
+                        message: 'SimulatedInvalidParameterException'
                     })
                 }
             });
@@ -205,31 +195,9 @@ describe('getOriginalImage()', function() {
             // Assert
             imageRequest.getOriginalImage('invalidBucket', 'invalidKey').then((result) => {
                 assert.equal(typeof result, Error);
-                assert.equal(result.status, 404);
-            }).catch((err) => console.log(err));
-        });
-    });
-    describe('003/unknownError', async function() {
-        it(`Should throw an error if an unkown problem happens when getting an object`, async function() {
-            // Arrange
-            const S3 = require('aws-sdk/clients/s3');
-            const sinon = require('sinon');
-            const getObject = S3.prototype.getObject = sinon.stub();
-            getObject.withArgs({Bucket: 'invalidBucket', Key: 'invalidKey'}).returns({
-                promise: () => {
-                    return Promise.reject({
-                        code: 'InternalServerError',
-                        message: 'SimulatedException'
-                    })
-                }
-            });
-            // Act
-            const imageRequest = new ImageRequest();
-            // Assert
-            imageRequest.getOriginalImage('invalidBucket', 'invalidKey').then((result) => {
-                assert.equal(typeof result, Error);
-                assert.equal(result.status, 500);
-            }).catch((err) => console.log(err));
+            }).catch((err) => {
+                console.log(err)
+            })
         });
     });
 });
@@ -679,79 +647,28 @@ describe('getAllowedSourceBuckets()', function() {
             });
         });
     });
-});
+})
 
 // ----------------------------------------------------------------------------
-// getOutputFormat()
+// parseImageHeaders()
 // ----------------------------------------------------------------------------
-describe('getOutputFormat()', function () {
-    describe('001/AcceptsHeaderIncludesWebP', function () {
-        it(`Should pass if it returns "webp" for an accepts header which includes webp`, function () {
-            // Arrange
-            process.env = {
-                AUTO_WEBP: "Yes"
-            };
-            const event = {
-                headers: {
-                    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3"
-                }
-            };
-            // Act
-            const imageRequest = new ImageRequest();
-            var result = imageRequest.getOutputFormat(event);
-            // Assert
-            assert.deepEqual(result, 'webp');
-        });
-    });
-    describe('002/AcceptsHeaderDoesNotIncludeWebP', function () {
-        it(`Should pass if it returns null for an accepts header which does not include webp`, function () {
-            // Arrange
-            process.env = {
-                AUTO_WEBP: "Yes"
-            };
-            const event = {
-                headers: {
-                    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/apng,*/*;q=0.8,application/signed-exchange;v=b3"
-                }
-            };
-            // Act
-            const imageRequest = new ImageRequest();
-            var result = imageRequest.getOutputFormat(event);
-            // Assert
-            assert.deepEqual(result, null);
-        });
-    });
-    describe('003/AutoWebPDisabled', function () {
-        it(`Should pass if it returns null when AUTO_WEBP is disabled with accepts header including webp`, function () {
-            // Arrange
-            process.env = {
-                AUTO_WEBP: "No"
-            };
-            const event = {
-                headers: {
-                    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3"
-                }
-            };
-            // Act
-            const imageRequest = new ImageRequest();
-            var result = imageRequest.getOutputFormat(event);
-            // Assert
-            assert.deepEqual(result, null);
-        });
-    });
-    describe('004/AutoWebPUnset', function () {
-        it(`Should pass if it returns null when AUTO_WEBP is not set with accepts header including webp`, function () {
+describe('parseImageHeaders()', function() {
+    describe('001/defaultCustomHeaders', function () {
+        it(`Should pass if the proper result is returned for a sample base64-
+            encoded image request`, function () {
             // Arrange
             const event = {
-                headers: {
-                    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3"
-                }
-            };
+                path: '/eyJoZWFkZXJzIjpbeyJrZXkiOiAiQ2FjaGUtQ29udHJvbCIsICJ2YWx1ZSI6ICJtYXgtYWdlPTMxNTM2MDAwLHB1YmxpYyJ9XX0='
+            }
             // Act
             const imageRequest = new ImageRequest();
-            var result = imageRequest.getOutputFormat(event);
+            const result = imageRequest.parseImageHeaders(event, 'Default');
             // Assert
-            assert.deepEqual(result, null);
+            const expectedResult = [{
+                key: "Cache-Control",
+                value: 'max-age=31536000,public'
+            }]
+            assert.deepEqual(result, expectedResult);
         });
     });
 });
