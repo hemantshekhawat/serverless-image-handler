@@ -1135,6 +1135,26 @@ describe('decodeRequest()', function() {
             }
         });
     });
+    describe('004/truncatedPathConfig', function() {
+        it('Should pass if a valid base64-encoded path has been specified', function() {
+            process.env = {
+                TRUNCATE_PATH_PREFIX: 'some-eu-path/'
+            }
+            // Arrange
+            const event = {
+                path : '/some-eu-path/eyJidWNrZXQiOiJidWNrZXQtbmFtZS1oZXJlIiwia2V5Ijoia2V5LW5hbWUtaGVyZSJ9'
+            }
+            // Act
+            const imageRequest = new ImageRequest(s3, secretsManager);
+            const result = imageRequest.decodeRequest(event);
+            // Assert
+            const expectedResult = {
+                bucket: 'bucket-name-here',
+                key: 'key-name-here'
+            };
+            expect(result).toEqual(expectedResult);
+        });
+    });
 });
 
 // ----------------------------------------------------------------------------

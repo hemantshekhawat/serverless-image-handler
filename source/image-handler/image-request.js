@@ -87,7 +87,7 @@ class ImageRequest {
                     this.outputFormat = outputFormat;
                 }
             }
-            
+
             // Fix quality for Thumbor and Custom request type if outputFormat is different from quality type.
             if (this.outputFormat) {
                 const requestType = ['Custom', 'Thumbor'];
@@ -276,7 +276,7 @@ class ImageRequest {
      * @param {object} event - Lambda request body.
     */
     parseRequestType(event) {
-        const path = event["path"];
+        const path = this.truncatedPath(event["path"]);
         const matchDefault = new RegExp(/^(\/?)([0-9a-zA-Z+\/]{4})*(([0-9a-zA-Z+\/]{2}==)|([0-9a-zA-Z+\/]{3}=))?$/);
         const matchThumbor = new RegExp(/^(\/?)((fit-in)?|(filters:.+\(.?\))?|(unsafe)?)(((.(?!(\.[^.\\\/]+$)))*$)|.*(\.jpg$|.\.png$|\.webp$|\.tiff$|\.jpeg$|\.svg$))/i);
         const matchCustom = new RegExp(/(\/?)(.*)(jpg|png|webp|tiff|jpeg|svg)/i);
@@ -294,7 +294,7 @@ class ImageRequest {
         } catch(error) {
             console.error(error);
             isBase64Encoded = false;
-        } 
+        }
 
         if (matchDefault.test(path) && isBase64Encoded) {  // use sharp
             return 'Default';
@@ -334,12 +334,14 @@ class ImageRequest {
      * @param {object} event - The proxied request object.
      */
     decodeRequest(event) {
-        const path = event["path"];
+        const path = this.truncatedPath(event["path"]);
         if (path !== undefined) {
             const encoded = path.charAt(0) === '/' ? path.slice(1) : path;
             const toBuffer = Buffer.from(encoded, 'base64');
             try {
                 // To support European characters, 'ascii' was removed.
+                const decoded = JSON.parse(toBuffer.toString())
+                console.log(decoded);
                 return JSON.parse(toBuffer.toString());
             } catch (e) {
                 throw ({
@@ -398,22 +400,32 @@ class ImageRequest {
     * @param {Buffer} imageBuffer - Image buffer.
     */
    inferImageType(imageBuffer) {
-    switch(imageBuffer.toString('hex').substring(0,8).toUpperCase()) {
-        case '89504E47': return 'image/png';
-        case 'FFD8FFDB': return 'image/jpeg';
-        case 'FFD8FFE0': return 'image/jpeg';
-        case 'FFD8FFEE': return 'image/jpeg';
-        case 'FFD8FFE1': return 'image/jpeg';
-        case '52494646': return 'image/webp';
-        case '49492A00': return 'image/tiff';
-        case '4D4D002A': return 'image/tiff';
-        default: throw {
-            status: 500,
-            code: 'RequestTypeError',
-            message: 'The file does not have an extension and the file type could not be inferred. Please ensure that your original image is of a supported file type (jpg, png, tiff, webp, svg). Refer to the documentation for additional guidance on forming image requests.'
-        };   
+        switch(imageBuffer.toString('hex').substring(0,8).toUpperCase()) {
+            case '89504E47': return 'image/png';
+            case 'FFD8FFDB': return 'image/jpeg';
+            case 'FFD8FFE0': return 'image/jpeg';
+            case 'FFD8FFEE': return 'image/jpeg';
+            case 'FFD8FFE1': return 'image/jpeg';
+            case '52494646': return 'image/webp';
+            case '49492A00': return 'image/tiff';
+            case '4D4D002A': return 'image/tiff';
+            default: throw {
+                status: 500,
+                code: 'RequestTypeError',
+                message: 'The file does not have an extension and the file type could not be inferred. Please ensure that your original image is of a supported file type (jpg, png, tiff, webp, svg). Refer to the documentation for additional guidance on forming image requests.'
+            };
+
+        }
     }
-}
+
+    truncatedPath(path) {
+        if (process.env.TRUNCATE_PATH_PREFIX !== undefined) {
+            // Allows cloudfront to be shared by adding a prefix/* to behaviour
+            return path.replace(process.env.TRUNCATE_PATH_PREFIX, '')
+        } else {
+            return path;
+        }
+    }
 }
 
 // Exports
