@@ -1,3 +1,31 @@
+DRONEBASE Notes
+
+There are actually two lambda functions in this code base.. The first is AWS serverless-image handler with a teeny modification for our CF distrubtion.
+
+EU creds
+
+```
+export VERSION=v1.0.10
+export REGION=eu-central-1
+export DIST_OUTPUT_BUCKET=db-serverless-image-handler
+export SOLUTION_NAME=image-resize-service-eu
+```
+
+ ./build-s3-dist.sh $DIST_OUTPUT_BUCKET $SOLUTION_NAME $VERSION
+aws s3 sync ./regional-s3-assets/ s3://$DIST_OUTPUT_BUCKET-$REGION/$SOLUTION_NAME/$VERSION/ --acl bucket-owner-full-control
+aws s3 sync ./global-s3-assets/ s3://$DIST_OUTPUT_BUCKET-$REGION/$SOLUTION_NAME/$VERSION/ --acl bucket-owner-full-control
+
+
+There is also the tiling service that we built to use the VIPS lib and tile our images for Insights
+
+This needs running
+
+`npm install --production  --arch=x64 --platform=linux --target=10.20.1`
+
+zipping up and deploying by uploading zip straight to the lambda function
+
+
+
 **_Important Notice:_**
 Due to a [change in the AWS Lambda execution environment](https://aws.amazon.com/blogs/compute/upcoming-updates-to-the-aws-lambda-execution-environment/), Serverless Image Handler v3 deployments are functionally broken. To address the issue we have released [minor version update v3.1.1](https://solutions-reference.s3.amazonaws.com/serverless-image-handler/v3.1.1/serverless-image-handler.template). We recommend all users of v3 to run cloudformation stack update with v3.1.1. Additionally, we suggest you to look at v5 of the solution and migrate to v5 if it addresses all of your use cases.
 
