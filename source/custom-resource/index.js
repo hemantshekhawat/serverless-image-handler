@@ -17,6 +17,7 @@ console.log('Loading function');
 
 const AWS = require('aws-sdk');
 const fs = require('fs');
+const fse = require('fs-extra');
 const path = require('path');
 const s3 = new AWS.S3();
 const sharp = require('sharp');
@@ -59,15 +60,23 @@ let tileImage = async function(bucket, key) {
                 console.log('err', err);
             } else {
                 console.log('successfully tiled images ' + tmp_location);
-                return Promise.all(upload_recursive_dir(tmp_location + 'tiled/', bucket, key, [])).then(function(errs, data) {
+                const tiledFolder = tmp_location + 'tiled/';
+                return Promise.all(upload_recursive_dir(tiledFolder, bucket, key, [])).then(function(errs, data) {
                         if (errs.length) console.log('errors ', errs);// an error occurred
                         console.log('successfully uploaded tiled images');
                     }).catch(function(exception) {
                         console.log('caught exception', exception);
                         throw exception;
                     }).finally(function() {
-                        deleteFolderRecursive(tmp_location + 'tiled/');
-                        console.log('successfully deleted tmp files');
+                        if (fs.existsSync(tiledFolder)) {
+                          console.log('removing folder: ' + tiledFolder);
+                          try {
+                            fse.removeSync(tiledFolder);
+                            console.log("Deleted " + tiledFolder);
+                          } catch(err) {
+                            console.log("Meh! Failed to Deleted the deleted: ", err);
+                          }
+                        }
                     });
             }
         });
@@ -161,17 +170,3 @@ let upload_recursive_dir = function(base_tmpdir, destS3Bucket, s3_key, promises)
     return promises;
 }
 
-let deleteFolderRecursive = function (directory_path) {
-    if (fs.existsSync(directory_path)) {
-        console.log('removing folder: ', directory_path);
-        fs.readdirSync(directory_path).forEach(function (file, index) {
-            var currentPath = path.join(directory_path, file);
-            if (fs.lstatSync(currentPath).isDirectory()) {
-                deleteFolderRecursive(currentPath);
-            } else {
-                fs.unlinkSync(currentPath); // delete file
-            }
-        });
-        fs.rmdirSync(directory_path); // delete directories
-    }
-};
