@@ -20,10 +20,11 @@ There is also the tiling service that we built to use the VIPS lib and tile our 
 
 This needs running
 
-`npm install --production  --arch=x64 --platform=linux --target=10.20.1`
+https://sharp.pixelplumbing.com/install#aws-lambda
+
+`SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm install --production  --arch=x64 --platform=linux --target=12.18.1 sharp`
 
 zipping up and deploying by uploading zip straight to the lambda function
-
 
 
 **_Important Notice:_**
